@@ -110,25 +110,26 @@ public final class StudentFakebookOracle extends FakebookOracle {
     public FirstNameInfo findNameInfo() throws SQLException {
         try (Statement stmt = oracle.createStatement(FakebookOracleConstants.AllScroll, FakebookOracleConstants.ReadOnly)) {
             ResultSet rst=stmt.executeQuery(
-			"SELECT LEN(First_Name) AS  max_length, min_length " +
+			"SELECT LENGTH(First_Name) AS  max_length " +
 			" From " +UsersTable+" "+
-			"WHERE First_Name IS NOT NULL " +
-			"Order by max_length DESC, min_length ASC "
-			);
+			"Order by max_length DESC");
 			int most_length=0;
 			int fewest_length=0;
-			while(rst.next()){
-				if(rst.isFirst()){
-					most_length=getInt(2);
-				}
-				if (rst.isLast){
-					fewest_length=getInt(2);
-				}
+			if(rst.next()){
+				most_length=rst.getInt(1);
 			}
 			rst=stmt.executeQuery(
-			"SELECT First_Name " +
+			"SELECT LENGTH(First_Name) AS  min_length " +
+			"From " + UsersTable + " " +
+			"Order by min_length asc");
+			if(rst.next()){
+				fewest_length=rst.getInt(1);
+			}
+			rst=stmt.executeQuery(
+			"SELECT distinct First_Name " +
 			"FROM " + UsersTable + " "+
-			"where LEN(First_Name) = " + most_length + " " 
+			"where LENGTH(First_Name) = " + most_length + " " +
+			"Order by First_Name "
 			);
 			FirstNameInfo info=new FirstNameInfo();
 			while(rst.next()){
@@ -136,9 +137,10 @@ public final class StudentFakebookOracle extends FakebookOracle {
 			}
 			
 			rst=stmt.executeQuery(
-			"SELECT First_Name " +
+			"SELECT distinct First_Name " +
 			"FROM " + UsersTable + " " +
-			"WHERE len(First_Name) = " + fewest_length + " "
+			"WHERE length(First_Name) = " + fewest_length + " " +
+			"Order by First_Name "
 			);
 
 			while(rst.next()){
@@ -147,7 +149,7 @@ public final class StudentFakebookOracle extends FakebookOracle {
 			rst=stmt.executeQuery(
 			"SELECT COUNT(*) AS NUM, First_Name " +
 			"FROM " + UsersTable + " " +
-			"GROUP BY First_Name " + " "
+			"GROUP BY First_Name " + " " +
 			"ORDER BY NUM DESC"
 			);
 			while(rst.next()){
@@ -156,8 +158,10 @@ public final class StudentFakebookOracle extends FakebookOracle {
 					info.addCommonName(rst.getString(2));
 				}
 			}
+			
 			rst.close();
-			mtst.close();
+			stmt.close();
+			return info;
 			/*
                 EXAMPLE DATA STRUCTURE USAGE
                 ============================================
@@ -172,7 +176,7 @@ public final class StudentFakebookOracle extends FakebookOracle {
                 info.setCommonNameCount(42);
                 return info;
             */
-            return new FirstNameInfo();                // placeholder for compilation
+                         // placeholder for compilation
         }
         catch (SQLException e) {
             System.err.println(e.getMessage());
@@ -193,16 +197,12 @@ public final class StudentFakebookOracle extends FakebookOracle {
         try (Statement stmt = oracle.createStatement(FakebookOracleConstants.AllScroll, FakebookOracleConstants.ReadOnly)) {
             ResultSet rst=stmt.executeQuery(
 			"SELECT User_ID, First_Name, Last_Name " +
-			"FROM " + UsersTable + " "
-			"WHERE User_ID NOT IN (SELECT a.User_ID 
-			from " + FriendsTable + "a 
-			Union 
-			SELECT b.User_ID
-			from " + FriendsTable "b)"
+			"FROM " + UsersTable + " " +
+			"WHERE User_ID NOT IN (SELECT a.User1_ID from " + FriendsTable + " a " + "Union SELECT b.User2_ID from " + FriendsTable + " b) "
 			);
 			
 			while(rst.next()){
-				UserInfo u1=new UserInfo(rst.getLong(1),getString(2),getString(3));
+				UserInfo u1=new UserInfo(rst.getLong(1),rst.getString(2),rst.getString(3));
 				results.add(u1);
 			}
 			rst.close();
@@ -233,15 +233,13 @@ public final class StudentFakebookOracle extends FakebookOracle {
         
         try (Statement stmt = oracle.createStatement(FakebookOracleConstants.AllScroll, FakebookOracleConstants.ReadOnly)) {
             ResultSet rst=stmt.executeQuery(
-			"SELECT User_ID, First_Name, Last_Name " +
-			"from " + UsersTable + " " +
-			"WHERE User_ID NOT IN(SELECT User_ID FROM " +
-			CurrentCitiesTable + " a, " + HometownCitiesTable + " b " + 
-			"where a.User_ID=b.User_ID and a.CURRENT_CITY_ID=b.HOMETOWN_CITY_ID
-			)"
+			"SELECT u.User_ID, u.First_Name, u.Last_Name " +
+			"from " + UsersTable + " u, " + CurrentCitiesTable + " a, " + HometownCitiesTable + " b " +
+			"WHERE u.User_ID=a.user_id and a.user_id=b.user_id and a.current_city_id <> b.hometown_city_id " +
+			"Order by u.User_ID asc"
 			);
 			while(rst.next()){
-				Userinfo u1=new UserInfo(rst.getLong(1),rst.getString(2),rst.getString(3));
+				UserInfo u1=new UserInfo(rst.getLong(1),rst.getString(2),rst.getString(3));
 				results.add(u1);
 			}
 			rst.close();
@@ -273,20 +271,32 @@ public final class StudentFakebookOracle extends FakebookOracle {
         FakebookArrayList<TaggedPhotoInfo> results = new FakebookArrayList<TaggedPhotoInfo>("\n");
         
         try (Statement stmt = oracle.createStatement(FakebookOracleConstants.AllScroll, FakebookOracleConstants.ReadOnly)) {
-            ResultSet rst=executeQuery(
-			"SELCT a.PHOTO_ID, a.PHOTO_LINK, b.ALBUM_ID, b.ALBUM_NAME, c.User_ID, c.First_Name, c.Last_Name " +
-			"FROM " + PhotosTable + " a, " + AlbumsTable + " b, " + UsersTable + " c, " + TagsTable + " d " +
-			"WHERE a.ALBUM_ID=b.ALBUM_ID and c.User_ID=d.Tag_subject_id and d.TAG_PHOTO_ID = a.PHOTO_ID and d.Tag_photo_id IN " +
-			"(SELECT a1.TAG_PHOTO_ID " +
+            ResultSet rst=stmt.executeQuery(
+			"SELECT a1.TAG_PHOTO_ID " +
 			"From " + TagsTable + " a1 " + 
-			"WHERE NROW <= " + num + " " +
-			"GROUP by TAG_PHOTO_ID 
-			 ORDER BY COUNT(*) DESC, TAG_PHOTO_ID ASC
-			)"			
+			"GROUP by a1.TAG_PHOTO_ID " +
+			"ORDER BY COUNT(*) DESC, a1.TAG_PHOTO_ID ASC"			
 			);
-			while(rst.next()){
-				PhotoInfo p=new PhotoInfo(rst.getLong(1),rst.getString(2),rst.getLong(3),rst.getString(4));
-				UserInfo u1=new UserInfo(rst.getLong(5),rst.getString(6),rst.getString(7));
+			int i=0;
+			while(rst.next() && i < num){
+				long photoid=rst.getLong(1);
+				Statement stmt1 = oracle.createStatement(FakebookOracleConstants.AllScroll, FakebookOracleConstants.ReadOnly);
+				ResultSet r=stmt1.executeQuery(
+				"SELECT a.User_id, a.First_name, a.last_name, b.photo_link, b.album_id, c.album_name " +
+				"From " + UsersTable + " a, " + PhotosTable + " b, " + AlbumsTable + " c, " + TagsTable + " d " +
+				"Where b.photo_id = " + photoid + " and d.tag_photo_id=b.photo_id and d.tag_subject_id=a.user_id and b.album_id=c.album_id " +
+				"Order by a.User_id asc"
+				);
+				while(r.next()){
+				PhotoInfo p=new PhotoInfo(photoid,r.getLong(5),r.getString(4),r.getString(6));
+				UserInfo u1=new UserInfo(r.getLong(1),r.getString(2),r.getString(3));
+				TaggedPhotoInfo tp=new TaggedPhotoInfo(p);
+				tp.addTaggedUser(u1);
+				results.add(tp);
+				}
+				r.close();
+				stmt1.close();
+				++i;
 			}
 			rst.close();
 			stmt.close();
@@ -329,7 +339,36 @@ public final class StudentFakebookOracle extends FakebookOracle {
         FakebookArrayList<MatchPair> results = new FakebookArrayList<MatchPair>("\n");
         
         try (Statement stmt = oracle.createStatement(FakebookOracleConstants.AllScroll, FakebookOracleConstants.ReadOnly)) {
-            /*
+            ResultSet rst=stmt.executeQuery(
+            "select a.user_id, b.user_id " +
+            "FROM " + UsersTable + " a, " + UsersTable + " b, " + TagsTable + " c, " + TagsTable + " d " +
+            "Where a.gender=b.gender and c.tag_subject_id=d.tag_subject_id and a.user_id<b.user_id and abs(a.YEAR_OF_BIRTH-b.YEAR_OF_BIRTH)<= " + yearDiff + " " + 
+            "and NROW <= " + num + " " +
+            "and not exists (select g.user1_id, g.user2_id " + 
+            "from " + FriendsTable + " g " +
+            "Where g.user1_id=a.user_id and g.user2_id=b.user_id) " +
+            "Group by (a.user_id, b.user_id) " +
+            "Order by count(*) desc, a.user_id asc, b.user_id asc "
+            );
+            while(rst.next()){
+            	long user1id=rst.getLong(1);
+            	long user2id=rst.getLong(2);
+            	ResultSet rst1=stmt.executeQuery(
+            	"SELECT a.user_id, b.user_id, a.First_Name, b.First_Name, a.Last_Name, b.Last_Name, c.photo_id, c.album_id, c.photo_link, d.album_name , a.year_of_birth, b.year_of_birth from " +
+            	UsersTable + " a " + UsersTable + " b " + PhotosTable + " c " + AlbumsTable + " d " + TagsTable + " e " + TagsTable + " f " + 
+            	"Where a.user_id=e.tag_subject_id and b.user_id=f.tag_subject_id and e.tag_photo_id=f.tag_photo_id and e.tag_photo_id = c.photo_id and c.album_id = d.album_id and a.user_id= " + user1id + " and b.user_id= "+  
+            	user2id + " " +
+            	"Order by c.photo_id asc"
+            	);
+            	UserInfo u1=new UserInfo(rst1.getLong(1),rst1.getString(3),rst1.getString(5));
+            	UserInfo u2=new UserInfo(rst1.getLong(2),rst1.getString(4),rst1.getString(6));
+            	MatchPair mp=new MatchPair(u1,rst1.getInt(11),u2,rst1.getInt(12));
+            	PhotoInfo p = new PhotoInfo(rst1.getLong(7), rst1.getLong(8), rst1.getString(9), rst1.getString(10));
+            	mp.addSharedPhoto(p);
+            	results.add(mp);
+		rst1.close();
+            }
+        	/*
                 EXAMPLE DATA STRUCTURE USAGE
                 ============================================
                 UserInfo u1 = new UserInfo(93103, "Romeo", "Montague");
@@ -339,6 +378,8 @@ public final class StudentFakebookOracle extends FakebookOracle {
                 mp.addSharedPhoto(p);
                 results.add(mp);
             */
+            rst.close();
+            stmt.close();
         }
         catch (SQLException e) {
             System.err.println(e.getMessage());
