@@ -287,11 +287,15 @@ public final class StudentFakebookOracle extends FakebookOracle {
 				"Where b.photo_id = " + photoid + " and d.tag_photo_id=b.photo_id and d.tag_subject_id=a.user_id and b.album_id=c.album_id " +
 				"Order by a.User_id asc"
 				);
-				while(r.next()){
+				if(r.next()){
 				PhotoInfo p=new PhotoInfo(photoid,r.getLong(5),r.getString(4),r.getString(6));
 				UserInfo u1=new UserInfo(r.getLong(1),r.getString(2),r.getString(3));
 				TaggedPhotoInfo tp=new TaggedPhotoInfo(p);
 				tp.addTaggedUser(u1);
+					while(r.next()){
+						u1=new UserInfo(r.getLong(1),r.getString(2),r.getString(3));
+						tp.addTaggedUser(u1);
+					}
 				results.add(tp);
 				}
 				r.close();
@@ -342,31 +346,39 @@ public final class StudentFakebookOracle extends FakebookOracle {
             ResultSet rst=stmt.executeQuery(
             "select a.user_id, b.user_id " +
             "FROM " + UsersTable + " a, " + UsersTable + " b, " + TagsTable + " c, " + TagsTable + " d " +
-            "Where a.gender=b.gender and c.tag_subject_id=d.tag_subject_id and a.user_id<b.user_id and abs(a.YEAR_OF_BIRTH-b.YEAR_OF_BIRTH)<= " + yearDiff + " " + 
-            "and NROW <= " + num + " " +
-            "and not exists (select g.user1_id, g.user2_id " + 
+            "Where a.gender=b.gender and c.tag_subject_id=a.user_id and d.tag_subject_id=b.user_id and c.tag_photo_id=d.tag_photo_id and a.user_id<b.user_id and abs(a.YEAR_OF_BIRTH-b.YEAR_OF_BIRTH)<= " + yearDiff + " " + 
+            "and (a.user_id,b.user_id) not in (select g.user1_id, g.user2_id " + 
             "from " + FriendsTable + " g " +
             "Where g.user1_id=a.user_id and g.user2_id=b.user_id) " +
             "Group by (a.user_id, b.user_id) " +
             "Order by count(*) desc, a.user_id asc, b.user_id asc "
             );
-            while(rst.next()){
+	    int i=0;
+            while(rst.next() && i<num){
             	long user1id=rst.getLong(1);
             	long user2id=rst.getLong(2);
-            	ResultSet rst1=stmt.executeQuery(
-            	"SELECT a.user_id, b.user_id, a.First_Name, b.First_Name, a.Last_Name, b.Last_Name, c.photo_id, c.album_id, c.photo_link, d.album_name , a.year_of_birth, b.year_of_birth from " +
-            	UsersTable + " a " + UsersTable + " b " + PhotosTable + " c " + AlbumsTable + " d " + TagsTable + " e " + TagsTable + " f " + 
-            	"Where a.user_id=e.tag_subject_id and b.user_id=f.tag_subject_id and e.tag_photo_id=f.tag_photo_id and e.tag_photo_id = c.photo_id and c.album_id = d.album_id and a.user_id= " + user1id + " and b.user_id= "+  
-            	user2id + " " +
-            	"Order by c.photo_id asc"
+		//System.out.println(user1id);	
+		//System.out.println(user2id);
+		Statement stmt1= oracle.createStatement(FakebookOracleConstants.AllScroll, FakebookOracleConstants.ReadOnly);
+            	ResultSet rst1=stmt1.executeQuery(
+            	"SELECT a.user_id, b.user_id, a.First_Name, b.First_Name, a.Last_Name, b.Last_Name, a.year_of_birth, b.year_of_birth, p.photo_id, p.photo_link, p.album_id, a1.album_name " +
+		"from " + UsersTable + " a, " + UsersTable + " b, " + PhotosTable + " p, " + AlbumsTable + " a1, " + TagsTable + " t1, " + TagsTable + " t2 " +
+            	"Where a.user_id= " + user1id + " " + "and b.user_id= "+  user2id + " " + "and t1.tag_photo_id=t2.tag_photo_id and p.photo_id=t1.tag_photo_id and p.album_id=a1.album_id and " + 
+		"t1.tag_subject_id = a.user_id and t2.tag_subject_id=b.user_id " +
+		"Order by p.photo_id asc "
             	);
-            	UserInfo u1=new UserInfo(rst1.getLong(1),rst1.getString(3),rst1.getString(5));
-            	UserInfo u2=new UserInfo(rst1.getLong(2),rst1.getString(4),rst1.getString(6));
-            	MatchPair mp=new MatchPair(u1,rst1.getInt(11),u2,rst1.getInt(12));
-            	PhotoInfo p = new PhotoInfo(rst1.getLong(7), rst1.getLong(8), rst1.getString(9), rst1.getString(10));
-            	mp.addSharedPhoto(p);
-            	results.add(mp);
+		MatchPair mp=null;
+		while(rst1.next()){
+            		UserInfo u1=new UserInfo(rst1.getLong(1),rst1.getString(3),rst1.getString(5));
+            		UserInfo u2=new UserInfo(rst1.getLong(2),rst1.getString(4),rst1.getString(6));
+            		mp=new MatchPair(u1,rst1.getInt(7),u2,rst1.getInt(8));
+			PhotoInfo p = new PhotoInfo(rst1.getLong(9), rst1.getLong(11), rst1.getString(10), rst1.getString(12));
+			mp.addSharedPhoto(p);
+			
+		}
+		results.add(mp);
 		rst1.close();
+		++i;
             }
         	/*
                 EXAMPLE DATA STRUCTURE USAGE
