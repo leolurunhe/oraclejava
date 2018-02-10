@@ -412,7 +412,92 @@ public final class StudentFakebookOracle extends FakebookOracle {
         FakebookArrayList<UsersPair> results = new FakebookArrayList<UsersPair>("\n");
         
         try (Statement stmt = oracle.createStatement(FakebookOracleConstants.AllScroll, FakebookOracleConstants.ReadOnly)) {
-            /*
+		ResultSet rst=stmt.executeQuery(
+		
+		"Select user1.user_id, user2.user_id, count(*)" + 
+		"From " + UsersTable + " user1, " + UsersTable + " user2, " + FriendsTable + " f1, " + FriendsTable + " f2 " +
+		"Where user1.user_id < user2.user_id " + 
+		"and ((user1.user_id = f1.user1_id and user2.user_id = f2.user1_id and f2.user2_id = f1.user2_id) or (user1.user_id = f1.user2_id and user2.user_id = f2.user2_id and f1.user1_id = f2.user1_id) or " +
+		"(user1.user_id = f1.user1_id and user2.user_id = f2.user2_id and f1.user2_id=f2.user1_id) or (user1.user_id = f2.user1_id and user2.user_id = f1.user2_id and f1.user2_id=f2.user1_id) ) " +
+		" and (user1.user_id, user2.user_id) not in " + 
+		"(Select g.user1_id, g.user2_id from " + FriendsTable + " g " + " " +
+		"Where user1.user_id = g.user1_id and user2.user_id = g.user2_id) " +
+		"Group by (user1.user_id, user2.user_id) " +
+		"Order by count(*) desc, user1.user_id asc, user2.user_id desc " 
+		);
+	
+		//Statement stmt1 = oracle.createStatement(FakebookOracleConstants.AllScroll, FakebookOracleConstants.ReadOnly);
+		//ResultSet rst=stmt1.executeQuery(
+		//"Create view countCommon(ct) " +
+	/*	" select count(*) as ct " +
+		"From view notFriends a, " + FriendsTable + " f3, " + FriendsTable + " f4 " +
+		"where a.user1_id=f3.user1_id and a.user2_id=f4.user1_id and f3.user2_id=f4.user2_id " +
+		"Group by f3.user2_id " +
+		"Order by a.user1_id asc, a.user2_id desc "	
+		);*/
+		/*
+		stmt.executeQuery(
+		"Create view Common(user1_id, user2_id, cnt) " +
+		"As select n.user1_id as user1_id, n.user2_id as user2_id, jb.cnt as cnt " +
+		"From notFriends n, countCommon jb "		
+		);
+		
+		ResultSet rst=stmt.executeQuery(
+		"Select d.user1_id, d.user2_id, u1.First_Name, u2.First_Name, u1.Last_Name, u2.Last_Name " +
+		"From Common d, " + UsersTable + " u1, " + UsersTable + " u2 " +
+		"Where d.user1_id = u1.user_id and d.user2_id = u2.user_id " +	
+		"Order by a.cnt desc, u1.user_id asc, u2.user_id desc "	
+		);*/
+		int i=0;
+		while(rst.next() && i<num){
+			long user1id=rst.getLong(1);
+			long user2id=rst.getLong(2);
+			int count=rst.getInt(3);
+			Statement stmt1 = oracle.createStatement(FakebookOracleConstants.AllScroll, FakebookOracleConstants.ReadOnly);
+			ResultSet rst1 = stmt1.executeQuery(
+			"Select a.First_Name, b.First_name, a.last_name, b.last_name " +
+			"From " + UsersTable + " a, " + UsersTable + " b " +
+			"Where a.user_id = " + user1id + " " + "and b.user_id = " + user2id			
+			);
+			UsersPair up = null;
+			while(rst1.next()){
+				//System.out.println(rst1.getString(1));
+				UserInfo u1 = new UserInfo(user1id, rst1.getString(1), rst1.getString(3));
+				UserInfo u2 = new UserInfo(user2id, rst1.getString(2), rst1.getString(4));
+				up = new UsersPair(u1,u2);
+				Statement stmt2 = oracle.createStatement(FakebookOracleConstants.AllScroll, FakebookOracleConstants.ReadOnly);
+				ResultSet rst2 = stmt2.executeQuery(
+				"Select m.user_id, m.first_name, m.last_name " +
+				"From " + UsersTable + " m, " + FriendsTable + " f1, " + FriendsTable + " f2 " +  
+				"Where (f1.user1_id = " + user1id + " and f2.user1_id = " + user2id + " and f1.user2_id = f2.user2_id and m.user_id = f2.user2_id) " + 
+				"or (f1.user1_id = " + user1id + " and f2.user2_id = " + user2id + " and f1.user2_id = f2.user1_id and m.user_id = f2.user1_id) " +
+				"or (f1.user2_id = " + user1id + " and f2.user1_id = " + user2id + " and f1.user1_id = f2.user2_id and m.user_id = f2.user2_id) " +
+				"or (f1.user2_id = " + user1id + " and f2.user2_id = " + user2id + " and f1.user1_id = f2.user1_id and m.user_id = f2.user1_id) " +
+				"Order by m.user_id asc " 			
+				);
+				while(rst2.next()){
+					String lname=rst2.getString(3);
+					String fname=rst2.getString(2);
+					UserInfo u3 = new UserInfo(rst2.getLong(1), fname, lname);
+					up.addSharedFriend(u3);				
+				}
+				rst2.close();
+				stmt2.close();
+			} 
+			results.add(up);
+			rst1.close();
+			stmt1.close();
+			
+			//System.out.println(count);
+			++i;
+		}	
+		
+		
+		rst.close();
+		stmt.close();		
+		
+		
+		/*
                 EXAMPLE DATA STRUCTURE USAGE
                 ============================================
                 UserInfo u1 = new UserInfo(16, "The", "Hacker");
